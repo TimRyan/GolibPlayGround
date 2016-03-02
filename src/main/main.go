@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"github.com/czhou/INSYNC-Futures-Lib"
 	"log"
 	"time"
@@ -8,8 +9,12 @@ import (
 
 func main() {
 
+	hostNPort := flag.String("h", "hostNPort", "String contains host and port. Format 192.168.1.1:8888")
+	strategyInst := flag.String("s", "strategyInst", "strategy instance name")
+	flag.Parse()
+
 	kprams := []common.KParams{{common.K_NONE, 0}, {common.K_SIMPLE, time.Second * 5}, {common.K_COMPLEX, time.Second * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
-	proc := common.NewProc("192.168.99.100:6379", "l", "1605", "YYYY", kprams, true)
+	proc := common.NewProc(*hostNPort, "l", "1605", *strategyInst, kprams, true)
 	proc.InProcessMarketData = processMarketData
 	proc.InProcessCandleStickData = processCandleStickData
 
