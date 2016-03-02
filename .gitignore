@@ -1,0 +1,9 @@
+/pkg
+/src/main/*.log
+/src/main/log
+/src/main/main
+/src/github.com/czhou/INSYNC-Futures-Lib/.git/
+/src/github.com/bitly/go-simplejson/.git/
+/src/github.com/garyburd/redigo/.git/
+/src/github.com/bitly/go-simplejson/.travis.yml
+/src/github.com/garyburd/redigo/.travis.yml
