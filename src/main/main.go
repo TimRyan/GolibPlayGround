@@ -13,10 +13,20 @@ func main() {
 	strategyInst := flag.String("s", "strategyInst", "strategy instance name")
 	flag.Parse()
 
+	log.Println(*strategyInst)
+
 	kprams := []common.KParams{{common.K_NONE, 0}, {common.K_SIMPLE, time.Second * 5}, {common.K_COMPLEX, time.Second * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
-	proc := common.NewProc(*hostNPort, "l", "1605", *strategyInst, kprams, true)
-	proc.InProcessMarketData = processMarketData
-	proc.InProcessCandleStickData = processCandleStickData
+	//	proc := common.NewProc(*hostNPort, "l", "1605", *strategyInst, kprams, true)
+	//	proc.InProcessMarketData = processMarketData
+	//	proc.InProcessCandleStickData = processCandleStickData
+
+	connMarket, _ := common.NewConn(*hostNPort)
+	subconnMartet, _ := connMarket.SubscribeChan(common.CH_MARKET, "l", "1605", true)
+
+	var mkt mar
+
+	//kprams := []common.KParams{{common.K_NONE, 0}, {common.K_SIMPLE, time.Second * 5}, {common.K_COMPLEX, time.Second * 10}}
+	go connMarket.LoadMarketData(subconnMartet, &mkt, kprams)
 
 	//	kprams3 := []common.KParams{{common.K_NONE, time.Duration(0)}} //获取分时、简单5秒钟K线，复杂10秒钟K线
 
@@ -61,6 +71,24 @@ func main() {
 	exitTime := time.NewTimer(time.Hour * 100)
 	log.Println("program exited at:", <-exitTime.C)
 
+}
+
+type mar struct {
+	kData []common.CandleStickData //K线数据
+	cpt   common.CapitalData
+}
+
+func (p *mar) ProcessMarketData(maketData common.MarketData) (interface{}, error) {
+
+	log.Println("[MarketData]:", maketData)
+	return nil, nil
+}
+
+func (p *mar) ProcessCandleStickData(candleData []common.CandleStickData) (interface{}, error) {
+
+	log.Println("Kdata:", candleData[len(candleData)-2])
+
+	return nil, nil
 }
 
 //函数变量
