@@ -21,7 +21,7 @@ func main() {
 	//	proc.InProcessCandleStickData = processCandleStickData
 
 	connMarket, _ := common.NewConn(*hostNPort)
-	subconnMartet, _ := connMarket.SubscribeChan(common.CH_MARKET, "p", "1605", true)
+	subconnMartet, _ := connMarket.SubscribeChan(common.CH_MARKET, "rb", "1605", true)
 
 	var mkt mar
 
