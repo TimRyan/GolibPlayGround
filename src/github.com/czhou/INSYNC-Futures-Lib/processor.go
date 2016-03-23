@@ -32,8 +32,8 @@ type Proc struct {
 	LocalOrderIDs []OrderIDStatus     //本地下单状态
 	LocalPos      []LocalPositionData //本地持仓数据
 
-	Rule       InstrumentRule //交易规则
-	CloseTimes []time.Time    //闭市时间
+	Rule             InstrumentRule //交易规则
+	TradingTimeSlots []time.Time    //闭市时间
 
 	InProcessMarketData              func(this *Proc, marketData MarketData) (interface{}, error)             //行情触发回调函数
 	InProcessCandleStickData         func(this *Proc, candleData []CandleStickData) (interface{}, error)      //K线触发回调函数
@@ -70,9 +70,9 @@ func (p *Proc) ProcessMarketData(marketData MarketData) (interface{}, error) {
 //K线回调函数
 func (p *Proc) ProcessCandleStickData(candleData []CandleStickData) (interface{}, error) {
 
-	if p.InstCode+p.InstNum == candleData[len(candleData)-2].InstrumentID {
-		kDuration := candleData[len(candleData)-2].KDuration
-		p.Cdl[kDuration] = append(p.Cdl[kDuration], candleData[len(candleData)-2])
+	if p.InstCode+p.InstNum == candleData[len(candleData)-1].InstrumentID {
+		kDuration := candleData[len(candleData)-1].KDuration
+		p.Cdl[kDuration] = append(p.Cdl[kDuration], candleData[len(candleData)-1])
 
 		if p.InProcessCandleStickData != nil {
 			p.InProcessCandleStickData(p, candleData)
@@ -144,7 +144,7 @@ func (p *Proc) PlaceOrder(buySellType, openCloseType string, price float64, amou
 		return -1, Error{"Place Order Failed, invalid buySellType"}
 	}
 
-	if !strings.EqualFold(openCloseType, "open") && !strings.EqualFold(openCloseType, "close") && !strings.EqualFold(openCloseType, "closetoday") {
+	if !strings.EqualFold(openCloseType, "open") && !strings.EqualFold(openCloseType, "closeyesterday") && !strings.EqualFold(openCloseType, "closetoday") {
 		log.Println("Place Order Failed, invalid openCloseType", openCloseType)
 		return -1, Error{"Place Order Failed, invalid openCloseType"}
 	}
@@ -213,6 +213,25 @@ func (p *Proc) CancelOrder(localOrderID int64) error {
 	return nil
 }
 
+//初始化函数
+func (p *Proc) Init() {
+
+	p.Mkt = []MarketData{}
+	p.LastTimeStamp = time.Time{}
+
+	//实例化K线map
+	p.Cdl = make(map[time.Duration][]CandleStickData)
+
+	p.LocalOrderIDs = []OrderIDStatus{}
+	p.LocalPos = []LocalPositionData{}
+
+	//初始化合约的闭市时间
+	p.TradingTimeSlots, _ = GetTradingTimeSlots(p.InstCode, GetSysTime().Now(p.IsNatual))
+	if len(p.TradingTimeSlots) == 0 {
+		log.Println("Instrument trading time is not initialized.")
+	}
+}
+
 func NewProc(hostNPort, instCode, instNum, strategy string, kParams []KParams, isNatual bool) *Proc {
 	var proc1 Proc
 
@@ -223,10 +242,19 @@ func NewProc(hostNPort, instCode, instNum, strategy string, kParams []KParams, i
 	proc1.IsNatual = isNatual
 
 	//初始化系统时间
-	sysT := GetSysTime()
+	GetSysTime()
 
-	//实例化K线map
-	proc1.Cdl = make(map[time.Duration][]CandleStickData)
+	//初始化合约交易规则
+	rules, e := GetInstrumentRules(hostNPort)
+	if e != nil {
+		log.Println(e)
+	}
+	proc1.Rule = rules[proc1.InstCode]
+
+	//初始化有重复初始化需求的变量
+	proc1.Init()
+
+	//初始化各种K线参数
 	proc1.KParams = kParams
 
 	proc1.ConnMarket, _ = NewConn(hostNPort)
@@ -250,33 +278,6 @@ func NewProc(hostNPort, instCode, instNum, strategy string, kParams []KParams, i
 	go proc1.ConnPOS.LoadPositionData(proc1.SubconnPOS, &proc1)
 	go proc1.ConnOMR.LoadOrderMatchedReturnData(proc1.SubconnOMR, &proc1)
 	go proc1.ConnPOC.LoadOrderCanceledReturnData(proc1.SubconnPOC, &proc1)
-
-	//初始化合约交易规则
-	rules, e := GetInstrumentRules(hostNPort)
-	if e != nil {
-		log.Println(e)
-	}
-	proc1.Rule = rules[proc1.InstCode]
-
-	//初始化合约的闭市时间
-	tradingTimes, _ := GetTradingTimeSlots(proc1.InstCode, proc1.IsNatual)
-	if len(tradingTimes) == 0 {
-		log.Println("Instrument trading time is not initialized.")
-	} else {
-		timeNow := sysT.Now(proc1.IsNatual).In(time.FixedZone("CST", 28800))
-		proc1.CloseTimes = append(proc1.CloseTimes, tradingTimes[len(tradingTimes)-1])
-
-		if tradingTimes[len(tradingTimes)-1].Truncate(time.Hour*24).Sub(tradingTimes[0].Truncate(time.Hour*24)) > 0 {
-			dayStart := timeNow.Truncate(time.Hour * 24).Add(-time.Hour * 8)
-			nightTradeEndP, _ := time.Parse("15:04:05", NIGHT_C1_TRADE_END_P1)
-			//获取的夜盘收盘时间是前一天，所以+1天
-			proc1.CloseTimes = append(proc1.CloseTimes, dayStart.Add(time.Duration(nightTradeEndP.Hour()-24)*time.Hour).Add(time.Duration(nightTradeEndP.Minute())*time.Minute).Add(time.Hour*24))
-		}
-
-		if len(proc1.CloseTimes) == 1 && timeNow.Hour() > 15 {
-			proc1.CloseTimes[0] = proc1.CloseTimes[0].Add(-time.Hour * 24)
-		}
-	}
 
 	return &proc1
 }

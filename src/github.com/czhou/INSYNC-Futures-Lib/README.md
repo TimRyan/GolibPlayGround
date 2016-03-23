@@ -113,12 +113,12 @@ func (p *mar) ProcessMarketData(maketData common.MarketData) (interface{}, error
 func (p *mar) ProcessCandleStickData(candleData []common.CandleStickData) (interface{}, error) {
 	
 	//处理5秒钟k线
-	if candleData[len(candleData)-2].KDuration == time.Second*5 {
+	if candleData[len(candleData)-1].KDuration == time.Second*5 {
 		fmt.Println("Duration[5s]:", candleData[len(candleData)-2])
 	}
 
 	//处理10秒钟k线
-	if candleData[len(candleData)-2].KDuration == time.Second*10 {
+	if candleData[len(candleData)-1].KDuration == time.Second*10 {
 		fmt.Println("Duration[10s]:", candleData[len(candleData)-2])
 	}
 	

@@ -7,6 +7,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -142,8 +143,12 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 		kParams = append(kParams, KParams{K_NONE, 0})
 	}
 
+	var isLastKDataProcessed bool = false      //是否已生成最后一根K线
+	var isLastKDataRoutineCreated bool = false //自然行情下，生成最后一根K线的routine是否已开始
+
 	for {
 		switch v := subConn.SubConn.Receive().(type) {
+
 		case redis.Message:
 
 			//处理JSON数据
@@ -152,7 +157,8 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			js, err := simplejson.NewJson([]byte(data))
 
 			if err != nil {
-				return err
+				fmt.Println(err)
+				continue
 			}
 
 			if !subConn.IsUnnatual {
@@ -169,6 +175,25 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			//fmt.Println("Natual Time:", sysT.Now(true))
 			//fmt.Println("Unnatual Time:", sysT.Now(false))
 
+			//非回测情况下,14:59分的时候创建一个1分钟进程，用来完成15:00最后一根K线的生成
+			if !subConn.IsUnnatual && !isLastKDataProcessed && !isLastKDataRoutineCreated && currentTime.Hour() == 14 && currentTime.Minute() >= 59 {
+
+				go func() {
+					fmt.Println("Processing last K bar routine is started.")
+					time.Sleep(time.Minute)
+					for _, v := range kParams {
+						if v.KComplexity == K_NONE {
+							continue
+						}
+						process.ProcessCandleStickData(kData[v.KDuration])
+						isLastKDataProcessed = true
+					}
+					fmt.Printf("Last K bar of the day[%v] is generated. \n", currentTime)
+				}()
+
+				isLastKDataRoutineCreated = true
+			}
+
 			//换天，生成下一天的K线槽
 			if len(kTimeSlots) == 0 {
 				isKTimeSlotsReady = false
@@ -180,10 +205,15 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			if !isKTimeSlotsReady {
 				for _, v := range kParams {
 					//获取一天的K线时间切片
-					kTimeSlotsTmp, err := GetIntervalTimeSlots(subConn.InstrumentCode, v.KDuration, !subConn.IsUnnatual)
+					var kTimeSlotsTmp []time.Time
+					if !subConn.IsUnnatual {
+						kTimeSlotsTmp, err = GetIntervalTimeSlots(subConn.InstrumentCode, v.KDuration, time.Now())
+					} else {
+						kTimeSlotsTmp, err = GetIntervalTimeSlots(subConn.InstrumentCode, v.KDuration, currentTime)
+					}
 					if err != nil {
 						fmt.Printf("GetIntervalTimeSlots(%v,%v) failed, in func LoadMarketData\n", subConn.InstrumentCode, v.KDuration)
-						return err
+						continue
 					}
 
 					kTimeSlots[v.KDuration] = kTimeSlotsTmp
@@ -193,13 +223,23 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			}
 
 			//分时数据处理
-			for _, mkt := range mktDataS {
+			for _, v := range kParams {
 
-				for _, v := range kParams {
+				//回测情况下，在15:00生成最后一根K线
+				if subConn.IsUnnatual {
+					if currentTime.Hour() == 15 && !isLastKDataProcessed {
+						process.ProcessCandleStickData(kData[v.KDuration])
+						isLastKDataProcessed = true
+						fmt.Printf("Last K bar of the day[%v] is generated. \n", currentTime)
+					}
+				}
+
+				for _, mkt := range mktDataS {
+
 					switch v.KComplexity {
 					case K_NONE:
 
-						//过滤第一条行情数据
+						//过滤无效行情数据
 						if currentTime.Before(kTimeSlots[v.KDuration][0]) || currentTime.After(kTimeSlots[v.KDuration][len(kTimeSlots[v.KDuration])-1]) {
 
 							fmt.Printf("Invalid MarketData current time[%v] not in[%v,%v]:%v\n", currentTime, kTimeSlots[v.KDuration][0], kTimeSlots[v.KDuration][len(kTimeSlots[v.KDuration])-1], mkt)
@@ -211,7 +251,7 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 
 					case K_SIMPLE:
 
-						//过滤第一条行情数据
+						//过滤无效行情数据
 						if currentTime.Before(kTimeSlots[v.KDuration][0]) || currentTime.After(kTimeSlots[v.KDuration][len(kTimeSlots[v.KDuration])-1]) {
 							fmt.Println("Invalid MarketData:", mkt)
 						} else {
@@ -222,7 +262,12 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 								if len(kData[v.KDuration]) > 1 {
 									//K线下一周期的第一条行情到达的时候触发处理上一条完整地K线
 									if kData[v.KDuration][len(kData[v.KDuration])-1].KNum == kData[v.KDuration][len(kData[v.KDuration])-2].KNum+1 && kData[v.KDuration][len(kData[v.KDuration])-1].Count == 1 {
-										process.ProcessCandleStickData(kData[v.KDuration])
+										//每天最后一根K线不由下一条K线行情来触发
+										if !isLastKDataProcessed {
+											//只返回完整的K线
+											process.ProcessCandleStickData(kData[v.KDuration][0 : len(kData[v.KDuration])-1])
+											isLastKDataProcessed = false
+										}
 									}
 								}
 							}
@@ -230,7 +275,7 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 
 					case K_COMPLEX:
 
-						//过滤第一条行情数据
+						//过滤无效行情数据
 						if currentTime.Before(kTimeSlots[v.KDuration][0]) || currentTime.After(kTimeSlots[v.KDuration][len(kTimeSlots[v.KDuration])-1]) {
 							fmt.Println("Invalid MarketData:", mkt)
 						} else {
@@ -241,7 +286,12 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 								if len(kData[v.KDuration]) > 1 {
 									//K线下一周期的第一条行情到达的时候触发处理上一条完整地K线
 									if kData[v.KDuration][len(kData[v.KDuration])-1].KNum == kData[v.KDuration][len(kData[v.KDuration])-2].KNum+1 && kData[v.KDuration][len(kData[v.KDuration])-1].Count == 1 {
-										process.ProcessCandleStickData(kData[v.KDuration])
+										//每天最后一根K线不由下一条K线行情来触发
+										if !isLastKDataProcessed {
+											//只返回完整的K线
+											process.ProcessCandleStickData(kData[v.KDuration][0 : len(kData[v.KDuration])-1])
+											isLastKDataProcessed = false
+										}
 									}
 								}
 							}
@@ -368,6 +418,7 @@ func processMarketDataJS(js *simplejson.Json, isNatual bool) ([]MarketData, time
 
 		//fmt.Println("IsNatual TmpT", tmpT)
 
+		//return mktDataS, time.Now()
 		return mktDataS, tmpT
 
 	} else {
@@ -820,15 +871,15 @@ func (c *RedisConn) PlaceOrder(chName string, order *OrderData, mktData MarketDa
 		dealPrice)
 
 	//下单存储在Redis List中
-	if err := c.Send("HMSET", "OrderList", localOrderID, orderStr); err != nil {
+	if _, err := c.Do("HMSET", "OrderList", localOrderID, orderStr); err != nil {
 		return -1, err
 	}
 
 	//下单到订单频道
-	if err := c.Send("PUBLISH", chName, orderStr); err != nil {
+	if _, err := c.Do("PUBLISH", chName, orderStr); err != nil {
 		return -1, err
 	}
-	c.Flush()
+	//c.Flush()
 	order.LocalOrderID = localOrderID
 	fmt.Println("PUBLISH", chName, orderStr)
 	return localOrderID, nil
@@ -842,10 +893,10 @@ func (c *RedisConn) CancelOrder(chName string, calOrder CancelOrderData) error {
 		calOrder.InstrumentNum,
 		calOrder.LocalOrderID)
 
-	if err := c.Send("PUBLISH", chName, orderStr); err != nil {
+	if _, err := c.Do("PUBLISH", chName, orderStr); err != nil {
 		return err
 	}
-	c.Flush()
+	//c.Flush()
 	fmt.Println("PUBLISH", chName, orderStr)
 	return nil
 }
@@ -1040,13 +1091,13 @@ func UpdateLocalPosition(hostNPort string, omr OrderMatchedReturnData) error {
 					return err
 				}
 
-			} else if order.OpenCloseType == "close" {
+			} else if order.OpenCloseType == "closeyesterday" || order.OpenCloseType == "closetoday" {
 
 				fmt.Println("No available position to close.")
 
 			} else {
-				fmt.Println("OpenCloseType is not valid, should be open or close. Getting:", order.OpenCloseType)
-				return Error{"OpenCloseType is not valid, should be open or close"}
+				fmt.Println("OpenCloseType is not valid, should be open/closeyesterday/closetoday. Getting:", order.OpenCloseType)
+				return Error{"OpenCloseType is not valid, should be open/closeyesterday/closetoday."}
 			}
 
 		} else {
@@ -1067,7 +1118,7 @@ func UpdateLocalPosition(hostNPort string, omr OrderMatchedReturnData) error {
 					return err
 				}
 
-			} else if order.OpenCloseType == "close" {
+			} else if order.OpenCloseType == "closeyesterday" || order.OpenCloseType == "closetoday" {
 				//平仓
 				posStr = fmt.Sprintf("{\"instrumentID\":\"%s\",\"buySellType\": \"%s\",\"openCloseType\":\"%s\",\"totalAmount\":\"%d\",\"averagePrice\":\"%f\",\"strategy\":\"%s\"}",
 					instrumentID,
@@ -1084,8 +1135,8 @@ func UpdateLocalPosition(hostNPort string, omr OrderMatchedReturnData) error {
 				}
 
 			} else {
-				fmt.Println("OpenCloseType is not valid, should be open or close. Getting:", order.OpenCloseType)
-				return Error{"OpenCloseType is not valid, should be open or close"}
+				fmt.Println("OpenCloseType is not valid, should be open/closeyesterday/closetoday. Getting:", order.OpenCloseType)
+				return Error{"OpenCloseType is not valid, should be open/closeyesterday/closetoday."}
 			}
 		}
 
@@ -1139,7 +1190,7 @@ func UpdateLocalPosition(hostNPort string, omr OrderMatchedReturnData) error {
 				return err
 			}
 
-		} else if openCloseType == "close" {
+		} else if openCloseType == "closeyesterday" || order.OpenCloseType == "closetoday" {
 			//平仓
 			if order.BuySellType == "buy" {
 
@@ -1178,8 +1229,8 @@ func UpdateLocalPosition(hostNPort string, omr OrderMatchedReturnData) error {
 			}
 
 		} else {
-			fmt.Println("OpenCloseType is not valid, should be open or close. Getting:", order.OpenCloseType)
-			return Error{"OpenCloseType is not valid, should be open or close"}
+			fmt.Println("OpenCloseType is not valid, should be open/closeyesterday/closetoday. Getting:", order.OpenCloseType)
+			return Error{"OpenCloseType is not valid, should be open/closeyesterday/closetoday."}
 		}
 
 	} else {
@@ -1211,7 +1262,12 @@ func GetOrderByLocalOrderID(hostNPort string, localOrderID int64) OrderData {
 	}
 	defer conn.Close()
 
-	data, _ := conn.Do("HGET", "OrderList", localOrderID)
+	data, err := conn.Do("HGET", "OrderList", localOrderID)
+
+	if err != nil {
+		fmt.Println("HGET OrderList Error. msg:", err)
+		return OrderData{}
+	}
 
 	order := OrderData{}
 
@@ -1245,4 +1301,23 @@ func GetOrderByLocalOrderID(hostNPort string, localOrderID int64) OrderData {
 		return order
 	}
 	return OrderData{}
+}
+
+//回测主动请求行情全局连接
+//单例模式
+var backTestPublishConn *RedisConn
+var backTestPublishConnOnce sync.Once
+
+func InitBackTestPublishConn(hostNPort string) *RedisConn {
+
+	backTestPublishConnOnce.Do(func() {
+		backTestPublishConn, _ = NewConn(hostNPort)
+	})
+	return backTestPublishConn
+}
+
+func GetNextTimeTick() {
+	if backTestPublishConn.Conn != nil {
+		backTestPublishConn.Do("PUBLISH", CH_TEST_GET_TIME_TICK, "")
+	}
 }

@@ -1,71 +1,30 @@
 package main
 
 import (
-	"flag"
+	//"flag"
 	"github.com/czhou/INSYNC-Futures-Lib"
 	"log"
 	"time"
 )
 
 func main() {
+	hostNPort := "192.168.99.100:6379"
+	kprams3 := []common.KParams{{common.K_NONE, time.Duration(0)}, {common.K_COMPLEX, time.Minute * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
 
-	hostNPort := flag.String("h", "hostNPort", "String contains host and port. Format 192.168.1.1:8888")
-	strategyInst := flag.String("s", "strategyInst", "strategy instance name")
-	flag.Parse()
+	proc1 := common.NewProc(hostNPort, "rb", "1610", "YYYY", kprams3, true)
+	proc1.InProcessMarketData = processMarketData
+	proc1.InProcessCandleStickData = processCandleStickData
 
-	log.Println(*strategyInst)
+	//common.InitBackTestPublishConn(hostNPort)
 
-	kprams := []common.KParams{{common.K_NONE, 0}, {common.K_SIMPLE, time.Second * 5}, {common.K_COMPLEX, time.Second * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
-	//	proc := common.NewProc(*hostNPort, "l", "1605", *strategyInst, kprams, true)
-	//	proc.InProcessMarketData = processMarketData
-	//	proc.InProcessCandleStickData = processCandleStickData
-
-	connMarket, _ := common.NewConn(*hostNPort)
-	subconnMartet, _ := connMarket.SubscribeChan(common.CH_MARKET, "rb", "1605", true)
-
-	var mkt mar
-
-	//kprams := []common.KParams{{common.K_NONE, 0}, {common.K_SIMPLE, time.Second * 5}, {common.K_COMPLEX, time.Second * 10}}
-	go connMarket.LoadMarketData(subconnMartet, &mkt, kprams)
-
-	//	kprams3 := []common.KParams{{common.K_NONE, time.Duration(0)}} //获取分时、简单5秒钟K线，复杂10秒钟K线
-
-	//	proc1 := common.NewProc("192.168.99.100:6379", "l", "1605", "YYYY", kprams3, true)
-	//	proc1.InProcessMarketData = processMarketData
-	//	proc1.InProcessOrderMatchedReturnData = processOrderMatchedReturnData
-
-	//	//测试下单和平仓
-
-	//	//买开
-	//	time.Sleep(time.Second * 2)
-	//	proc1.PlaceOrder("buy", "open", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	proc1.PlaceOrder("buy", "open", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	//卖开
-	//	proc1.PlaceOrder("sell", "open", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	proc1.PlaceOrder("sell", "open", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-
-	//	//买平
-	//	proc1.PlaceOrder("buy", "close", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	proc1.PlaceOrder("buy", "close", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	//卖平
-	//	proc1.PlaceOrder("sell", "close", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
-	//	proc1.PlaceOrder("sell", "close", 0, 5, "marketprice")
-	//	time.Sleep(time.Second * 5)
-	//	log.Println("LocalIDs--->:", proc1.LocalOrderIDs, "LocalPos:", proc1.LocalPos)
+	//	i := 0
+	//	t1 := time.Now()
+	//	for i = 0; i < 10000; i++ {
+	//		//time.Sleep(time.Second * 1)
+	//		common.GetNextTimeTick()
+	//	}
+	//	t2 := time.Now()
+	//	log.Println("i:=", i, "time:", t2.Sub(t1))
 
 	//程序退出
 	exitTime := time.NewTimer(time.Hour * 100)
@@ -98,7 +57,7 @@ var processMarketData = func(this *common.Proc, marketData common.MarketData) (i
 }
 
 var processCandleStickData = func(this *common.Proc, candleData []common.CandleStickData) (interface{}, error) {
-	log.Println("Candle:", candleData[len(candleData)-2])
+	log.Println("Candle:", candleData[len(candleData)-1])
 	return nil, nil
 }
 

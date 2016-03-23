@@ -38,7 +38,7 @@ func Substr(str string, start, length int) string {
 
 //一次返回所有K线时间段
 //直接传入品种代码instCode，自动识别交易时间
-func GetIntervalTimeSlots(instCode string, duration time.Duration, isNatual bool) ([]time.Time, error) {
+func GetIntervalTimeSlots(instCode string, duration time.Duration, timeNow time.Time) ([]time.Time, error) {
 
 	var category int //品种的交易时间类型
 
@@ -75,7 +75,7 @@ func GetIntervalTimeSlots(instCode string, duration time.Duration, isNatual bool
 	var timeslots []time.Time
 	var nonTradeDuration []time.Duration
 
-	tradingTimeSlots, err := GetTradingTimeSlots(instCode, isNatual)
+	tradingTimeSlots, err := GetTradingTimeSlots(instCode, timeNow)
 
 	if err != nil {
 		return []time.Time{time.Now()}, err
@@ -103,7 +103,11 @@ func GetIntervalTimeSlots(instCode string, duration time.Duration, isNatual bool
 			tTmp := timeslots[len(timeslots)-1].Add(duration)
 
 			if !tTmp.After(tradingTimeSlots[1]) {
-				timeslots = append(timeslots, tTmp)
+				if tTmp.Equal(tradingTimeSlots[1]) {
+					timeslots = append(timeslots, tradingTimeSlots[2])
+				} else {
+					timeslots = append(timeslots, tTmp)
+				}
 				continue
 			} else if !tTmp.After(tradingTimeSlots[3]) {
 
@@ -243,7 +247,7 @@ func GetIntervalTimeSlots(instCode string, duration time.Duration, isNatual bool
 }
 
 //一次返回交易时间段
-func GetTradingTimeSlots(instCode string, isNatual bool) ([]time.Time, error) {
+func GetTradingTimeSlots(instCode string, timeNow time.Time) ([]time.Time, error) {
 
 	var category int //品种的交易时间类型
 
@@ -279,11 +283,10 @@ func GetTradingTimeSlots(instCode string, isNatual bool) ([]time.Time, error) {
 
 	//获取每天零时
 	//CST时区，UTC向东偏移8小时（28800秒），取零点-8小时
-	timeNow := GetSysTime().Now(isNatual).In(time.FixedZone("CST", 28800))
-	dayStart := timeNow.Truncate(time.Hour * 24).Add(-time.Hour * 8)
+	dayStart := timeNow.In(time.FixedZone("CST", 28800)).Truncate(time.Minute * 60).Add(-time.Hour * time.Duration(timeNow.Hour()))
 
-	//如果是晚上7点以后调用该函数，则返回第二天的时间
-	if timeNow.Hour() > 19 {
+	//如果是下午3点以后调用该函数，则返回第二天的时间
+	if timeNow.Hour() > 18 {
 		dayStart = dayStart.Add(time.Hour * 24)
 	}
 

@@ -224,7 +224,8 @@ const (
 	CH_CAPITAL_PUBLISH = "STRATEGY:ReqQryCustomerCapital" //发送资金查询频道
 	CH_CAPITAL         = "TRADE:TradingAccount"           //获取资金频道
 
-	CH_TEST_MARKET = "QUOTE:test" //回测行情频道
+	CH_TEST_MARKET        = "QUOTE:test"     //回测行情频道
+	CH_TEST_GET_TIME_TICK = "STRATEGY:ReqMd" //通知获取下一个时间tick的频道
 )
 
 //Redis变量

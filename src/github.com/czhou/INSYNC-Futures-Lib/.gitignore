@@ -6,3 +6,4 @@
 /main.go
 /*.log
 #/processor.go
+.idea
