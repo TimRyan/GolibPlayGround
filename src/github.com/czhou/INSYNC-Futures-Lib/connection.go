@@ -102,6 +102,8 @@ func (c *RedisConn) SubscribeChan(chanName, instCode, instNum string, isMarketDa
 	} else {
 		channel = chanName
 		redisSubCon.ChannelName = channel
+		redisSubCon.InstrumentCode = instCode
+		redisSubCon.InstrumentNum = instNum
 	}
 
 	//订阅频道
@@ -175,22 +177,24 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			//fmt.Println("Natual Time:", sysT.Now(true))
 			//fmt.Println("Unnatual Time:", sysT.Now(false))
 
-			//非回测情况下,14:59分的时候创建一个1分钟进程，用来完成15:00最后一根K线的生成
-			if !subConn.IsUnnatual && !isLastKDataProcessed && !isLastKDataRoutineCreated && currentTime.Hour() == 14 && currentTime.Minute() >= 59 {
+			//非回测情况下,14:59分的时候创建一个2分钟进程，用来完成15:01最后一根K线的生成
+			if !subConn.IsUnnatual && !isLastKDataProcessed && !isLastKDataRoutineCreated && currentTime.Hour() == 14 && currentTime.Minute() == 59 {
 
 				go func() {
 					fmt.Println("Processing last K bar routine is started.")
-					time.Sleep(time.Minute)
+					time.Sleep(time.Minute * 2)
 					for _, v := range kParams {
 						if v.KComplexity == K_NONE {
 							continue
 						}
 						process.ProcessCandleStickData(kData[v.KDuration])
-						isLastKDataProcessed = true
 					}
+					isLastKDataProcessed = false
+					isLastKDataRoutineCreated = false
 					fmt.Printf("Last K bar of the day[%v] is generated. \n", currentTime)
 				}()
 
+				isLastKDataProcessed = true
 				isLastKDataRoutineCreated = true
 			}
 
@@ -927,7 +931,7 @@ func GetInstrumentRules(hostNPort string) (map[string]InstrumentRule, error) {
 
 	v, err2 := conn.Do("GET", VAR8_INST_RULES)
 	if v == nil {
-		return nil, Error{"redis DO GET heyue_rules failed"}
+		return nil, Error{"redis DO GET QUOTE:instrumentsInfo failed"}
 	}
 	if err2 != nil {
 		return nil, err2
