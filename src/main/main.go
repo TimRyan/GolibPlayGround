@@ -1,33 +1,35 @@
 package main
 
 import (
-	"flag"
+	//"flag"
 	"github.com/czhou/INSYNC-Futures-Lib"
 	"log"
 	"time"
 )
 
 func main() {
-	//hostNPort := "192.168.99.100:6379"
+	hostNPort := "192.168.99.100:6379"
+	//hostNPort := "192.168.8.66:63212"
 
-	hostNPort := flag.String("h", "hostNPort", "String contains host and port. Format 192.168.1.1:8888")
-	strategyInst := flag.String("s", "strategyInst", "strategy instance name")
-	flag.Parse()
+	//	hostNPort := flag.String("h", "hostNPort", "String contains host and port. Format 192.168.1.1:8888")
+	//	strategyInst := flag.String("s", "strategyInst", "strategy instance name")
+	//	flag.Parse()
 
-	log.Println(*strategyInst)
-	kprams3 := []common.KParams{{common.K_NONE, time.Duration(0)}, {common.K_COMPLEX, time.Minute * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
+	//log.Println(*strategyInst)
+	kprams3 := []common.KParams{{common.K_NONE, time.Duration(0)}, {common.K_SIMPLE, time.Minute * 5}, {common.K_COMPLEX, time.Minute * 10}} //获取分时、简单5秒钟K线，复杂10秒钟K线
 
-	proc1 := common.NewProc(*hostNPort, "rb", "1610", "YYYY", kprams3, true)
+	proc1 := common.NewProc(hostNPort, "rb", "1610", "YYYY", kprams3, true)
 	proc1.InProcessMarketData = processMarketData
 	proc1.InProcessCandleStickData = processCandleStickData
 
-	//common.InitBackTestPublishConn(hostNPort)
+	//	common.InitBackTestPublishConn(hostNPort)
 
 	//	i := 0
 	//	t1 := time.Now()
 	//	for i = 0; i < 10000; i++ {
 	//		//time.Sleep(time.Second * 1)
 	//		common.GetNextTimeTick()
+	//		log.Println("Next...")
 	//	}
 	//	t2 := time.Now()
 	//	log.Println("i:=", i, "time:", t2.Sub(t1))

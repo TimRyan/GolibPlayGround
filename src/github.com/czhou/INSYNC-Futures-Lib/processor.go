@@ -304,7 +304,7 @@ func (p *Capital) ProcessCapitalData(cptData CapitalData) (interface{}, error) {
 	}
 
 	p.Cpt = cptData
-	log.Println("capital:", cptData)
+	//log.Println("capital:", cptData)
 	return nil, nil
 }
 
