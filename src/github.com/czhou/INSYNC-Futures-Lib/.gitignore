@@ -1,0 +1,9 @@
+/pkg
+#/src
+#/src/github.com
+/src/main/*.log
+/src/main/*
+/main.go
+/*.log
+#/processor.go
+.idea

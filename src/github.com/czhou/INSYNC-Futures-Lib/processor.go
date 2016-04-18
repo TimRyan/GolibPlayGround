@@ -70,12 +70,16 @@ func (p *Proc) ProcessMarketData(marketData MarketData) (interface{}, error) {
 //K线回调函数
 func (p *Proc) ProcessCandleStickData(candleData []CandleStickData) (interface{}, error) {
 
-	if p.InstCode+p.InstNum == candleData[len(candleData)-1].InstrumentID {
-		kDuration := candleData[len(candleData)-1].KDuration
-		p.Cdl[kDuration] = append(p.Cdl[kDuration], candleData[len(candleData)-1])
+	if len(candleData) == 0 {
+		return nil, Error{"Candle Stick Data is nil."}
+	} else {
+		if p.InstCode+p.InstNum == candleData[len(candleData)-1].InstrumentID {
+			kDuration := candleData[len(candleData)-1].KDuration
+			p.Cdl[kDuration] = append(p.Cdl[kDuration], candleData[len(candleData)-1])
 
-		if p.InProcessCandleStickData != nil {
-			p.InProcessCandleStickData(p, candleData)
+			if p.InProcessCandleStickData != nil {
+				p.InProcessCandleStickData(p, candleData)
+			}
 		}
 	}
 
@@ -300,7 +304,7 @@ func (p *Capital) ProcessCapitalData(cptData CapitalData) (interface{}, error) {
 	}
 
 	p.Cpt = cptData
-	log.Println("capital:", cptData)
+	//log.Println("capital:", cptData)
 	return nil, nil
 }
 

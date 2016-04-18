@@ -154,13 +154,13 @@ type PlaceOrderResponseData struct {
 
 //成交回报数据
 type OrderMatchedReturnData struct {
-	InstrumentID  string  //合约号
+	//InstrumentID  string  //合约号
 	TradePrice   float64 //成交价格
 	TradeAmount  int64   //成交量
 	TradeTime    string  //交易所返回时间
 	LocalOrderID int64   //本地下单id
 	MatchedTime  int64   //程序时间戳
-	OpenCloseType string  //开平仓标志
+	//OpenCloseType string  //开平仓标志
 }
 
 //撤单响应数据
