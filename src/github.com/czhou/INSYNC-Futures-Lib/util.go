@@ -285,8 +285,8 @@ func GetTradingTimeSlots(instCode string, timeNow time.Time) ([]time.Time, error
 	//CST时区，UTC向东偏移8小时（28800秒），取零点-8小时
 	dayStart := timeNow.In(time.FixedZone("CST", 28800)).Truncate(time.Minute * 60).Add(-time.Hour * time.Duration(timeNow.Hour()))
 
-	//如果是晚上8点以后调用该函数，则返回第二天的时间
-	if timeNow.Hour() > 19 {
+	//如果是下午3点以后调用该函数，则返回第二天的时间
+	if timeNow.Hour() > 18 {
 		dayStart = dayStart.Add(time.Hour * 24)
 	}
 

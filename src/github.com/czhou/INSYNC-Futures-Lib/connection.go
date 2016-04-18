@@ -102,8 +102,6 @@ func (c *RedisConn) SubscribeChan(chanName, instCode, instNum string, isMarketDa
 	} else {
 		channel = chanName
 		redisSubCon.ChannelName = channel
-		redisSubCon.InstrumentCode = instCode
-		redisSubCon.InstrumentNum = instNum
 	}
 
 	//订阅频道
@@ -177,24 +175,22 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 			//fmt.Println("Natual Time:", sysT.Now(true))
 			//fmt.Println("Unnatual Time:", sysT.Now(false))
 
-			//非回测情况下,14:59分的时候创建一个2分钟进程，用来完成15:01最后一根K线的生成
-			if !subConn.IsUnnatual && !isLastKDataProcessed && !isLastKDataRoutineCreated && currentTime.Hour() == 14 && currentTime.Minute() == 59 {
+			//非回测情况下,14:59分的时候创建一个1分钟进程，用来完成15:00最后一根K线的生成
+			if !subConn.IsUnnatual && !isLastKDataProcessed && !isLastKDataRoutineCreated && currentTime.Hour() == 14 && currentTime.Minute() >= 59 {
 
 				go func() {
 					fmt.Println("Processing last K bar routine is started.")
-					time.Sleep(time.Minute * 2)
+					time.Sleep(time.Minute)
 					for _, v := range kParams {
 						if v.KComplexity == K_NONE {
 							continue
 						}
 						process.ProcessCandleStickData(kData[v.KDuration])
+						isLastKDataProcessed = true
 					}
-					isLastKDataProcessed = false
-					isLastKDataRoutineCreated = false
 					fmt.Printf("Last K bar of the day[%v] is generated. \n", currentTime)
 				}()
 
-				isLastKDataProcessed = true
 				isLastKDataRoutineCreated = true
 			}
 
@@ -267,6 +263,7 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 									//K线下一周期的第一条行情到达的时候触发处理上一条完整地K线
 									if kData[v.KDuration][len(kData[v.KDuration])-1].KNum == kData[v.KDuration][len(kData[v.KDuration])-2].KNum+1 && kData[v.KDuration][len(kData[v.KDuration])-1].Count == 1 {
 										//每天最后一根K线不由下一条K线行情来触发
+										fmt.Printf("TANXIAO->CurrentTime:%v,isLastKDataProcessed:%v,kData:%v", currentTime, isLastKDataProcessed, kData[v.KDuration][len(kData[v.KDuration])-1])
 										if !isLastKDataProcessed {
 											//只返回完整的K线
 											process.ProcessCandleStickData(kData[v.KDuration][0 : len(kData[v.KDuration])-1])
@@ -291,6 +288,7 @@ func (c *RedisConn) LoadMarketData(subConn RedisSubConn, process ProcessMarketDa
 									//K线下一周期的第一条行情到达的时候触发处理上一条完整地K线
 									if kData[v.KDuration][len(kData[v.KDuration])-1].KNum == kData[v.KDuration][len(kData[v.KDuration])-2].KNum+1 && kData[v.KDuration][len(kData[v.KDuration])-1].Count == 1 {
 										//每天最后一根K线不由下一条K线行情来触发
+										fmt.Printf("TANXIAO->CurrentTime:%v,isLastKDataProcessed:%v,kData:%v", currentTime, isLastKDataProcessed, kData[v.KDuration][len(kData[v.KDuration])-1])
 										if !isLastKDataProcessed {
 											//只返回完整的K线
 											process.ProcessCandleStickData(kData[v.KDuration][0 : len(kData[v.KDuration])-1])
@@ -668,21 +666,21 @@ func (c *RedisConn) LoadOrderMatchedReturnData(subConn RedisSubConn, process Pro
 			}
 
 			//填充模型数据
-			//instrumentID, _ := js.Get("instrumentID").String() //没有该字段，需清理
+			instrumentID, _ := js.Get("instrumentID").String() //没有该字段，需清理
 			tradePrice, _ := js.Get("TradePrice").String()
 			tradeAmount, _ := js.Get("TradeAmount").String()
 			tradeTime, _ := js.Get("TradeTime").String()
 			localOrderID, _ := js.Get("localOrderID").String()
 			matchedTime, _ := js.Get("OnRtnMatchedInfoTime").String()
-			//openCloseType, _ := js.Get("open_close_type").String() //只有部分api会返回该字段，需清理
+			openCloseType, _ := js.Get("open_close_type").String() //只有部分api会返回该字段，需清理
 
-			//omrData.InstrumentID = instrumentID
+			omrData.InstrumentID = instrumentID
 			omrData.TradePrice, _ = strconv.ParseFloat(tradePrice, 64)
 			omrData.TradeAmount, _ = strconv.ParseInt(tradeAmount, 0, 64)
 			omrData.TradeTime = tradeTime
 			omrData.LocalOrderID, _ = strconv.ParseInt(localOrderID, 0, 64)
 			omrData.MatchedTime, _ = strconv.ParseInt(matchedTime, 0, 64)
-			//omrData.OpenCloseType = openCloseType
+			omrData.OpenCloseType = openCloseType
 
 			omrDataArrayTemp = append(omrDataArrayTemp, omrData)
 
@@ -931,7 +929,7 @@ func GetInstrumentRules(hostNPort string) (map[string]InstrumentRule, error) {
 
 	v, err2 := conn.Do("GET", VAR8_INST_RULES)
 	if v == nil {
-		return nil, Error{"redis DO GET QUOTE:instrumentsInfo failed"}
+		return nil, Error{"redis DO GET heyue_rules failed"}
 	}
 	if err2 != nil {
 		return nil, err2
